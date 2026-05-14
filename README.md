@@ -284,8 +284,11 @@ WAF-style allowlist of expected event types on the SSE stream.
 
 - A small offline test suite of ~30 stored requests with expected pass/refuse
   outcomes, run in CI to catch prompt regressions.
-- A fine-tuned safety classifier on labeled examples instead of a zero-shot
-  prompt — cheaper, faster, more consistent than gpt-3.5 for L1/L4.
+- A fine-tuned safety classifier on labeled examples instead of the current
+  few-shot-prompted gpt-3.5 — cheaper per call, faster, and even more
+  consistent than few-shot once the labelled set grows past a few hundred
+  examples. The current 11-example `SAFETY_IN_FEWSHOT` would be the seed for
+  the training set.
 - "Story memory" so a revision can refer to characters from earlier in the
   conversation.
 - Sentence-level read-aloud streaming TTS.

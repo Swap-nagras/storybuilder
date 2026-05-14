@@ -3,8 +3,9 @@
 What I would have built in 2 more hours:
 - A "story memory" so revisions can mention earlier characters/places by reference.
 - Read-aloud TTS that streams the story sentence-by-sentence to the speaker.
-- A fine-tuned safety classifier on labelled examples instead of a zero-shot prompt
-  (cheaper, faster, more consistent than calling gpt-3.5 for the L1/L4 checks).
+- A fine-tuned safety classifier trained on labelled examples (seeded from the
+  current 11-pair SAFETY_IN_FEWSHOT) instead of few-shot-prompted gpt-3.5 —
+  cheaper per call, faster, and more consistent at scale.
 - A small offline test suite of ~30 stored requests with expected pass/refuse
   outcomes, run on CI to catch prompt regressions.
 """
