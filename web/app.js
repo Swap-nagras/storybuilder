@@ -130,11 +130,13 @@ async function streamStory(body, ui) {
 function handleEvent(ev, ui) {
   const { type, payload } = ev;
   if (type === "safety_in") {
+    const label = payload.revision ? "revision" : "input";
     if (payload.status === "running") {
-      traceRow(ui.trace, "🛡", "Safety check (input): running …");
+      traceRow(ui.trace, "🛡", `Safety check (${label}): running …`);
     } else {
       const cls = payload.allow ? "pass" : "fail";
-      traceRow(ui.trace, "🛡", "Safety check (input): " +
+      traceRow(ui.trace, "🛡",
+        `Safety check (${label}): ` +
         (payload.allow ? "ALLOWED" : "REFUSED") + " — " + payload.reason, cls);
     }
   } else if (type === "spec") {

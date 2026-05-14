@@ -20,10 +20,12 @@ def _print_event(event) -> None:
     t = event.type
     p = event.payload
     if t == "safety_in":
+        label = "revision" if p.get("revision") else "input"
         if p.get("status") == "running":
-            print("[L1] safety check: input ...", flush=True)
+            print(f"[L1] safety check ({label}) ...", flush=True)
         else:
-            print(f"[L1] safety check: {'ALLOWED' if p['allow'] else 'REFUSED'} — {p['reason']}",
+            print(f"[L1] safety check ({label}): "
+                  f"{'ALLOWED' if p['allow'] else 'REFUSED'} — {p['reason']}",
                   flush=True)
     elif t == "spec":
         if p.get("status") == "running":
@@ -97,6 +99,8 @@ def run_once(
 
 
 def main() -> int:
+    from config import MAX_INPUT_CHARS, MAX_REVISION_CHARS
+
     print("Bedtime Story Studio (for ages 5-10). Ctrl-C to quit.\n")
     try:
         user_input = input("What kind of story do you want to hear? ").strip()
@@ -104,6 +108,9 @@ def main() -> int:
         return 0
     if not user_input:
         print("(no input) goodbye.")
+        return 0
+    if len(user_input) > MAX_INPUT_CHARS:
+        print(f"(input too long — keep it under {MAX_INPUT_CHARS} characters.)")
         return 0
 
     story, spec, refused = run_once(user_input)
@@ -119,9 +126,12 @@ def main() -> int:
         if not note or note.lower() in {"n", "no", "done", "quit", "exit"}:
             print("\nGoodnight!")
             return 0
+        if len(note) > MAX_REVISION_CHARS:
+            print(f"(revision too long — keep it under {MAX_REVISION_CHARS} characters.)")
+            continue
         story, spec, refused = run_once(user_input, prior_spec=spec, revision_note=note)
         if refused:
-            # On refusal of a revision, keep the previous spec so user can try again.
+            # Keep the previous spec so the user can try a different revision.
             continue
 
 

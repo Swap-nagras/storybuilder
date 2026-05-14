@@ -15,6 +15,27 @@ TEMP_EVALUATOR = 0.1
 MIN_WORDS = 300
 MAX_WORDS = 500
 
-REFUSAL_PREFIX = (
+REFUSAL_PREFIX_UNSAFE_STORY = (
     "I can't write that story, because it would not be safe for a 5-10 year old. "
 )
+REFUSAL_PREFIX_UNSAFE_REVISION = (
+    "I can't make that change to the story, because it would not be safe for a 5-10 year old. "
+)
+
+# Maximum lengths to defend against prompt-stuffing and OpenAI cost abuse.
+MAX_INPUT_CHARS = 500
+MAX_REVISION_CHARS = 200
+
+# Safety floor fields that the server forces on every StorySpec, so a malicious
+# client cannot send `must_avoid: []` to bypass storyteller constraints.
+HARD_MUST_AVOID = [
+    "violence",
+    "weapons used to harm",
+    "scary imagery",
+    "death without comfort",
+    "romantic content",
+    "profanity",
+    "real-world tragedy",
+    "drugs, alcohol, gambling",
+    "hate speech, slurs, political or religious conflict",
+]

@@ -12,20 +12,56 @@ from typing import Generator, Optional
 
 from config import (
     ACCEPT_SCORE,
+    HARD_MUST_AVOID,
     MAX_ITERATIONS,
     NO_IMPROVEMENT_EPSILON,
-    REFUSAL_PREFIX,
+    REFUSAL_PREFIX_UNSAFE_REVISION,
+    REFUSAL_PREFIX_UNSAFE_STORY,
     SAFETY_FLOOR,
 )
-from agents.safety_filter import check_input, check_output
+from agents.safety_filter import check_input, check_output, check_revision
 from agents.prompt_engineer import build_spec
 from agents.storyteller import write_story
 from agents.evaluator import judge
-from schemas import ProgressEvent, StorySpec, Verdict
+from schemas import ProgressEvent, SafetyDecision, StorySpec, Verdict
 
 
 def _event(type_: str, agent: str, **payload) -> ProgressEvent:
     return ProgressEvent(type=type_, agent=agent, payload=payload)
+
+
+_PIVOT_HINTS = {"meta_request", "off_topic", "sensitive_info"}
+
+
+def _format_refusal(decision: SafetyDecision, *, default_prefix: str) -> str:
+    """Pick the right refusal framing.
+
+    - meta/off_topic/sensitive: the classifier already wrote a smart pivot in `reason`.
+      Use it verbatim — adding a kid-safety prefix would be wrong for a prompt-injection probe.
+    - unsafe_topic / unknown: prepend the kid-safety prefix.
+    """
+    hint = (decision.category_hint or "").lower().strip()
+    reason = (decision.reason or "").strip()
+    if hint in _PIVOT_HINTS:
+        return reason or (
+            "I can't share that, but I'd love to tell you a bedtime story instead."
+        )
+    return default_prefix + (
+        reason or "the request involves content that isn't appropriate."
+    )
+
+
+def _harden_spec(spec: StorySpec) -> StorySpec:
+    """Force the safety-critical `must_avoid` list onto a spec.
+
+    Prevents a client-supplied (or model-supplied) spec from omitting safety
+    constraints. We dedupe while preserving order.
+    """
+    merged = list(spec.must_avoid)
+    for item in HARD_MUST_AVOID:
+        if item not in merged:
+            merged.append(item)
+    return spec.model_copy(update={"must_avoid": merged})
 
 
 def run(
@@ -40,30 +76,59 @@ def run(
     is_revision = prior_spec is not None and revision_note is not None
 
     if not is_revision:
-        # L1: input safety gate
+        # L1: input safety gate (also catches meta/off-topic/prompt-injection)
         yield _event("safety_in", "safety_filter", status="running")
         decision = check_input(user_input)
-        yield _event("safety_in", "safety_filter",
-                     status="done", allow=decision.allow, reason=decision.reason)
+        yield _event(
+            "safety_in", "safety_filter",
+            status="done", allow=decision.allow, reason=decision.reason,
+            category_hint=decision.category_hint,
+        )
         if not decision.allow:
-            yield _event("refusal", "safety_filter",
-                         reason=REFUSAL_PREFIX + decision.reason)
+            yield _event(
+                "refusal", "safety_filter",
+                reason=_format_refusal(decision, default_prefix=REFUSAL_PREFIX_UNSAFE_STORY),
+                category_hint=decision.category_hint,
+            )
             return
 
         # Prompt engineer
         yield _event("spec", "prompt_engineer", status="running")
         try:
             spec = build_spec(user_input)
-        except Exception as e:
-            yield _event("error", "prompt_engineer", message=str(e))
-            yield _event("refusal", "prompt_engineer",
-                         reason="Sorry, I couldn't plan a story for that. Please try a different request.")
+        except Exception:
+            # Do not leak exception details to the client.
+            yield _event("error", "prompt_engineer", message="planning failed")
+            yield _event(
+                "refusal", "prompt_engineer",
+                reason="Sorry, I couldn't plan a story for that. Please try a different request.",
+            )
             return
+        spec = _harden_spec(spec)
         yield _event("spec", "prompt_engineer",
                      status="done", spec=spec.model_dump())
     else:
-        # Revision: reuse spec, attach the new instruction.
-        spec = prior_spec.model_copy(update={"user_revision_note": revision_note})
+        # Revision flow: re-check the change itself (covers meta/off-topic/unsafe),
+        # then harden the (possibly client-supplied) prior spec.
+        yield _event("safety_in", "safety_filter", status="running", revision=True)
+        rev_decision = check_revision(revision_note)
+        yield _event(
+            "safety_in", "safety_filter",
+            status="done", revision=True,
+            allow=rev_decision.allow, reason=rev_decision.reason,
+            category_hint=rev_decision.category_hint,
+        )
+        if not rev_decision.allow:
+            yield _event(
+                "refusal", "safety_filter",
+                reason=_format_refusal(rev_decision, default_prefix=REFUSAL_PREFIX_UNSAFE_REVISION),
+                category_hint=rev_decision.category_hint,
+            )
+            return
+
+        spec = _harden_spec(prior_spec).model_copy(
+            update={"user_revision_note": revision_note},
+        )
         yield _event("spec", "prompt_engineer",
                      status="reused", spec=spec.model_dump(),
                      note=f"Revision: {revision_note}")
@@ -114,8 +179,11 @@ def run(
         prior_suggestions = verdict.suggestions
 
     if best is None:
-        yield _event("refusal", "evaluator",
-                     reason=REFUSAL_PREFIX + "I couldn't write a draft that met the safety bar.")
+        yield _event(
+            "refusal", "evaluator",
+            reason=REFUSAL_PREFIX_UNSAFE_STORY
+                   + "I couldn't write a draft that met the safety bar.",
+        )
         return
 
     final_story, final_verdict = best
@@ -126,8 +194,10 @@ def run(
     yield _event("safety_out", "safety_filter",
                  status="done", allow=final_check.allow, reason=final_check.reason)
     if not final_check.allow:
-        yield _event("refusal", "safety_filter",
-                     reason=REFUSAL_PREFIX + final_check.reason)
+        yield _event(
+            "refusal", "safety_filter",
+            reason=REFUSAL_PREFIX_UNSAFE_STORY + (final_check.reason or "the draft was unsafe."),
+        )
         return
 
     yield _event(
