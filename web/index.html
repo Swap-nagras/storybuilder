@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bedtime Story Studio</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Bedtime Story Studio</h1>
+    <div class="sub">for ages 5–10 • powered by 3 cooperating agents</div>
+    <button id="reset" title="Start a new story">New story</button>
+  </header>
+
+  <main id="chat" aria-live="polite"></main>
+
+  <form id="composer" autocomplete="off">
+    <input
+      id="prompt"
+      name="prompt"
+      type="text"
+      placeholder="What kind of story would you like? (e.g. Alice and her cat Bob)"
+      required
+      autofocus
+    />
+    <button id="send" type="submit">Send</button>
+  </form>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
