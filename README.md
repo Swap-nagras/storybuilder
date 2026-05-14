@@ -188,6 +188,17 @@ requirements.txt
 
 ### Prompting strategies in use
 
+- **Few-shot prompting** on every control-plane agent (safety L1, prompt
+  engineer, evaluator, safety L4). Each system prompt is followed by 2-4
+  worked examples interleaved as alternating `(user, assistant)` turns —
+  `llm._build_messages` assembles them. The example sets live in `prompts.py`
+  as `SAFETY_IN_FEWSHOT`, `PROMPT_ENGINEER_FEWSHOT`, `EVALUATOR_FEWSHOT`,
+  `SAFETY_OUT_FEWSHOT`. The examples are deliberately mixed: each set covers
+  one or more "allow / pass" cases and one or more "refuse / fail" cases,
+  including an **adversarial** one (a "kid-friendly vampire" framing for L1,
+  a violent draft for the evaluator) so the model has seen the exact failure
+  mode it must catch. This is the single biggest reliability lever on
+  gpt-3.5-turbo's structured outputs in this pipeline.
 - **Role + constraint prompts** with explicit "for ages 5-10" framing on every agent.
 - **JSON-mode + Pydantic parsing** on all three control-plane agents (safety,
   prompt engineer, evaluator). The storyteller stays free-form.

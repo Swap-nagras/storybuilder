@@ -2,7 +2,12 @@
 
 from config import TEMP_SAFETY
 from llm import call_json
-from prompts import SAFETY_IN_SYSTEM, SAFETY_OUT_SYSTEM
+from prompts import (
+    SAFETY_IN_FEWSHOT,
+    SAFETY_IN_SYSTEM,
+    SAFETY_OUT_FEWSHOT,
+    SAFETY_OUT_SYSTEM,
+)
 from schemas import SafetyDecision
 
 
@@ -14,6 +19,7 @@ def check_input(user_input: str) -> SafetyDecision:
         schema=SafetyDecision,
         temperature=TEMP_SAFETY,
         max_tokens=200,
+        few_shot=SAFETY_IN_FEWSHOT,
     )
 
 
@@ -25,4 +31,5 @@ def check_output(story: str) -> SafetyDecision:
         schema=SafetyDecision,
         temperature=TEMP_SAFETY,
         max_tokens=200,
+        few_shot=SAFETY_OUT_FEWSHOT,
     )

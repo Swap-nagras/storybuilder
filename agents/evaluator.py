@@ -2,7 +2,7 @@
 
 from config import TEMP_EVALUATOR
 from llm import call_json
-from prompts import EVALUATOR_SYSTEM
+from prompts import EVALUATOR_FEWSHOT, EVALUATOR_SYSTEM
 from schemas import StorySpec, Verdict
 
 
@@ -23,4 +23,5 @@ def judge(spec: StorySpec, story: str) -> Verdict:
         schema=Verdict,
         temperature=TEMP_EVALUATOR,
         max_tokens=600,
+        few_shot=EVALUATOR_FEWSHOT,
     )

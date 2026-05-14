@@ -1,6 +1,19 @@
-"""All agent prompts. Kept in one file so they're easy to iterate on."""
+"""All agent prompts. Kept in one file so they're easy to iterate on.
+
+Few-shot examples for each control-plane agent live alongside their system prompts
+as `*_FEWSHOT` lists. `llm.call_json` / `call_text` interleave them as alternating
+(user, assistant) turns. They're the highest-leverage prompting tool here — gpt-3.5
+is much more consistent on structured outputs when it has seen 2-3 worked examples.
+"""
+
+import json
 
 from config import MIN_WORDS, MAX_WORDS
+
+
+def _ex(obj) -> str:
+    """Render a dict as the compact JSON we want gpt-3.5 to imitate."""
+    return json.dumps(obj, ensure_ascii=False)
 
 
 # ---------- L1 input safety gate ----------
@@ -30,6 +43,33 @@ Reply ONLY with a JSON object:
 
 The `reason` is shown to the user on refusal, so be kind and specific without being preachy.
 """
+
+SAFETY_IN_FEWSHOT = [
+    (
+        "User request:\nA bedtime story about a little fox who learns to share his apples with a friend.",
+        _ex({"allow": True, "reason": "safe", "category_hint": "animals"}),
+    ),
+    (
+        "User request:\nA scary murder mystery I can read to my little brother.",
+        _ex({
+            "allow": False,
+            "reason": "Murder mysteries involve violence that isn't safe for a 5-10 year old audience.",
+            "category_hint": "mystery",
+        }),
+    ),
+    (
+        "User request:\nTell me a kid-friendly bedtime story about a vampire who drinks blood.",
+        _ex({
+            "allow": False,
+            "reason": "The premise of drinking blood is unsettling for young children even with a kid-friendly framing.",
+            "category_hint": "horror",
+        }),
+    ),
+    (
+        "User request:\nA gentle story about a dragon who is scared of fireflies.",
+        _ex({"allow": True, "reason": "safe", "category_hint": "fantasy"}),
+    ),
+]
 
 
 # ---------- Prompt engineer ----------
@@ -78,6 +118,66 @@ Reply ONLY with a JSON object matching this schema:
   "user_revision_note": null
 }}
 """
+
+PROMPT_ENGINEER_FEWSHOT = [
+    (
+        "User request:\nA bedtime story about Lily the bunny who can't fall asleep.",
+        _ex({
+            "category": "bedtime_calm",
+            "arc": "gentle_3_beat",
+            "title_hint": "Lily the Bunny's Sleepy Night",
+            "characters": ["Lily (the bunny)"],
+            "setting": "a soft burrow under an oak tree on a starry night",
+            "moral_or_theme": "comforting routines help us drift to sleep",
+            "tone": "warm and soothing",
+            "vocab_band": "simple, ages 5-7",
+            "target_words": 320,
+            "must_include": ["bedtime", "starry sky", "a gentle lullaby"],
+            "must_avoid": ["scary imagery", "any tense climax", "violence", "real-world tragedy"],
+            "user_revision_note": None,
+        }),
+    ),
+    (
+        "User request:\nAn adventure story about Mira, a brave girl, who finds a lost treasure map in her grandfather's attic.",
+        _ex({
+            "category": "adventure",
+            "arc": "classic_5_act",
+            "title_hint": "Mira and the Attic Map",
+            "characters": ["Mira", "Grandfather"],
+            "setting": "a dusty attic and the sunny meadow it points to",
+            "moral_or_theme": "courage and curiosity lead to treasure of the heart",
+            "tone": "bright and adventurous",
+            "vocab_band": "middle, ages 7-9",
+            "target_words": 450,
+            "must_include": ["attic", "treasure map", "discovery"],
+            "must_avoid": [
+                "violence", "weapons used to harm", "scary imagery",
+                "death without comfort", "romantic content",
+            ],
+            "user_revision_note": None,
+        }),
+    ),
+    (
+        "User request:\nA story about two best friends who have a small fight over a toy and make up.",
+        _ex({
+            "category": "friendship",
+            "arc": "lesson_arc",
+            "title_hint": "The Shared Train",
+            "characters": ["Nia", "Theo"],
+            "setting": "a sunlit playroom",
+            "moral_or_theme": "saying sorry repairs friendships",
+            "tone": "warm and honest",
+            "vocab_band": "simple, ages 5-7",
+            "target_words": 360,
+            "must_include": ["a shared toy", "an apology", "playing together again"],
+            "must_avoid": [
+                "physical fighting", "name-calling beyond a small word",
+                "scary imagery", "real-world tragedy",
+            ],
+            "user_revision_note": None,
+        }),
+    ),
+]
 
 
 # ---------- Storyteller ----------
@@ -142,6 +242,60 @@ Reply ONLY with a JSON object:
 }}
 """
 
+EVALUATOR_FEWSHOT = [
+    (
+        "StorySpec:\n"
+        "  category=animals, arc=gentle_3_beat, vocab_band=simple, ages 5-7, target_words=320\n"
+        "  characters=['Lily (the bunny)'], setting=burrow on a starry night, theme=comforting routines\n"
+        "  must_avoid=['scary imagery', 'any tense climax']\n\n"
+        "Draft to evaluate:\n"
+        "Lily the bunny couldn't fall asleep. She wiggled her ears and sighed. Mama bunny "
+        "tucked her under a clover blanket and hummed a little song. The stars peeked through "
+        "the burrow window. Soon Lily's eyes grew heavy, and she drifted off into a dream of "
+        "soft green meadows.\n\n(Word count: 56)",
+        _ex({
+            "reasoning": "Safe and warm but far too short for the target; arc beats are present but compressed.",
+            "safety": 10.0, "age_fit": 9.0, "arc_quality": 7.0,
+            "engagement": 7.0, "vocab_fit": 9.0, "length_fit": 3.0,
+            "issues": [
+                "Story is only 56 words; target is 320.",
+                "Beat 2 (the small problem) is too thin to feel real.",
+            ],
+            "suggestions": [
+                "Expand Lily's bedtime worry with a sensory detail (a tickly whisker, a thumping foot).",
+                "Add a calming routine: a warm cup of clover tea, a story from Papa bunny.",
+            ],
+            "passed": False,
+        }),
+    ),
+    (
+        "StorySpec:\n"
+        "  category=adventure, arc=classic_5_act, vocab_band=middle, ages 7-9, target_words=400\n"
+        "  characters=['Mira'], setting=forest path, theme=courage\n"
+        "  must_avoid=['violence', 'weapons used to harm']\n\n"
+        "Draft to evaluate:\n"
+        "Mira drew her sword and slashed at the wolf, blood spraying across the leaves. "
+        "She felt powerful as the wolf yelped and ran. 'I'll hunt them all,' she whispered.\n\n"
+        "(Word count: 32)",
+        _ex({
+            "reasoning": "Contains graphic violence (blood spraying, slashing) and a vengeful tone; instant fail on safety.",
+            "safety": 1.0, "age_fit": 2.0, "arc_quality": 3.0,
+            "engagement": 4.0, "vocab_fit": 6.0, "length_fit": 2.0,
+            "issues": [
+                "Blood and weapon violence are explicitly forbidden by must_avoid.",
+                "Mira's 'hunt them all' line glamorizes harm to animals.",
+                "Story is far below target length and has no arc.",
+            ],
+            "suggestions": [
+                "Replace the wolf with a misunderstood, lonely creature Mira helps.",
+                "Remove every weapon and any reference to blood or injury.",
+                "Develop a full 5-act arc within 400 words.",
+            ],
+            "passed": False,
+        }),
+    ),
+]
+
 
 # ---------- L4 final independent safety recheck ----------
 
@@ -164,3 +318,23 @@ Reply ONLY with a JSON object:
 If you allow, set allow=true and reason="safe". If you refuse, allow=false and reason names the
 specific issue (e.g. "the wolf attack scene is too violent").
 """
+
+SAFETY_OUT_FEWSHOT = [
+    (
+        "Story to audit:\n\n"
+        "Lily the bunny couldn't fall asleep. Mama bunny tucked her under a clover blanket and "
+        "hummed a little song. The stars peeked through the burrow window. Soon Lily's eyes grew "
+        "heavy, and she drifted off into a dream of soft green meadows.",
+        _ex({"allow": True, "reason": "safe", "category_hint": None}),
+    ),
+    (
+        "Story to audit:\n\n"
+        "The witch grabbed the children and locked them in her oven. The smoke rose as their "
+        "screams echoed through the woods. No one ever heard them again.",
+        _ex({
+            "allow": False,
+            "reason": "Children being trapped and harmed with no comforting resolution is too distressing for a 5-10 year old.",
+            "category_hint": None,
+        }),
+    ),
+]

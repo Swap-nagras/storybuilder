@@ -6,13 +6,15 @@ Keeps the model pinned to gpt-3.5-turbo per the assignment. Supports an optional
 
 import json
 import os
-from typing import Optional, Type, TypeVar
+from typing import List, Optional, Tuple, Type, TypeVar
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
 from config import MODEL
+
+FewShot = List[Tuple[str, str]]  # list of (user_message, assistant_message) pairs
 
 load_dotenv()
 
@@ -31,19 +33,32 @@ def _client_singleton() -> OpenAI:
     return _client
 
 
+def _build_messages(
+    system_prompt: str,
+    user_prompt: str,
+    few_shot: Optional[FewShot],
+) -> list[dict]:
+    """Assemble the messages array, interleaving few-shot (user, assistant) pairs."""
+    msgs: list[dict] = [{"role": "system", "content": system_prompt}]
+    if few_shot:
+        for u, a in few_shot:
+            msgs.append({"role": "user", "content": u})
+            msgs.append({"role": "assistant", "content": a})
+    msgs.append({"role": "user", "content": user_prompt})
+    return msgs
+
+
 def call_text(
     user_prompt: str,
     system_prompt: str,
     temperature: float,
     max_tokens: int = 1200,
+    few_shot: Optional[FewShot] = None,
 ) -> str:
     """Free-form text generation (used by the storyteller)."""
     resp = _client_singleton().chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages=_build_messages(system_prompt, user_prompt, few_shot),
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -60,15 +75,13 @@ def call_json(
     temperature: float,
     max_tokens: int = 800,
     retries: int = 1,
+    few_shot: Optional[FewShot] = None,
 ) -> T:
     """JSON-mode generation parsed into a Pydantic model.
 
     Retries once on parse/validation failure with a corrective nudge.
     """
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
+    messages = _build_messages(system_prompt, user_prompt, few_shot)
     last_err: Optional[Exception] = None
     for attempt in range(retries + 1):
         resp = _client_singleton().chat.completions.create(

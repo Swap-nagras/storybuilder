@@ -2,7 +2,7 @@
 
 from config import TEMP_PROMPT_ENGINEER
 from llm import call_json
-from prompts import PROMPT_ENGINEER_SYSTEM
+from prompts import PROMPT_ENGINEER_FEWSHOT, PROMPT_ENGINEER_SYSTEM
 from schemas import StorySpec
 
 
@@ -13,4 +13,5 @@ def build_spec(user_input: str) -> StorySpec:
         schema=StorySpec,
         temperature=TEMP_PROMPT_ENGINEER,
         max_tokens=600,
+        few_shot=PROMPT_ENGINEER_FEWSHOT,
     )
